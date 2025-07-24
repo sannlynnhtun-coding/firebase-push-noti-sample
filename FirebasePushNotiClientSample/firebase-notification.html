@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="my">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Notification Receiver</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Padauk', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-8 space-y-6">
+
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-gray-900">Firebase Notification Receiver</h1>
+            <p class="text-gray-500 mt-2">ဤ Web App သည် သင်၏ ASP.NET API မှ ပေးပို့သော Notification များကို
+                လက်ခံရန်ဖြစ်သည်</p>
+        </div>
+
+        <!-- Status and Permission Section -->
+        <div id="status-section" class="p-4 rounded-lg bg-gray-50 border">
+            <h2 class="font-bold text-lg mb-2">အခြေအနေ (Status)</h2>
+            <p id="permission-status" class="text-gray-600">Notification လက်ခံရန် ခွင့်ပြုချက် မတောင်းရသေးပါ...</p>
+            <button id="request-permission-btn"
+                class="mt-4 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-300 disabled:bg-gray-400">
+                Notification လက်ခံရန် ခွင့်ပြုချက်တောင်းမည်
+            </button>
+        </div>
+
+        <!-- Device Token Section -->
+        <div id="token-section" class="p-4 rounded-lg bg-gray-50 border hidden">
+            <h2 class="font-bold text-lg mb-2">သင့်ရဲ့ Device Token</h2>
+            <p class="text-sm text-gray-500 mb-2">ဤ Token ကို Copy ကူးပြီး Postman ကဲ့သို့သော Tool တွင် အသုံးပြု၍ သင်၏
+                API ကို စမ်းသပ်ပါ။</p>
+            <div class="relative bg-gray-200 p-3 rounded-md">
+                <pre id="fcm-token"
+                    class="text-sm break-all whitespace-pre-wrap text-gray-700">Token ကို စောင့်ဆိုင်းနေသည်...</pre>
+                <button id="copy-token-btn"
+                    class="absolute top-2 right-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1 px-2 rounded text-xs">Copy</button>
+            </div>
+        </div>
+
+        <!-- Incoming Messages Section -->
+        <div id="messages-section" class="p-4 rounded-lg bg-gray-50 border">
+            <h2 class="font-bold text-lg mb-2">လက်ခံရရှိသော Notification များ (Foreground)</h2>
+            <div id="messages-log" class="space-y-3 h-40 overflow-y-auto p-2 bg-white rounded-md border">
+                <p class="text-gray-400 text-center italic">Notification အသစ်များကို စောင့်မျှော်နေသည်...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
+
+        // --- အရေးကြီး ---
+        // TODO: သင်၏ Firebase Project မှ Web App Configuration ကို ဤနေရာတွင် ထည့်သွင်းပါ။
+        // Firebase Console -> Project Settings -> General tab -> Your apps -> Web app
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID",
+            measurementId: "YOUR_MEASUREMENT_ID"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const messaging = getMessaging(app);
+
+        const permissionBtn = document.getElementById('request-permission-btn');
+        const permissionStatusEl = document.getElementById('permission-status');
+        const tokenSection = document.getElementById('token-section');
+        const fcmTokenEl = document.getElementById('fcm-token');
+        const copyTokenBtn = document.getElementById('copy-token-btn');
+        const messagesLogEl = document.getElementById('messages-log');
+
+        // Function to request permission and get token
+        async function requestPermissionAndGetToken() {
+            permissionStatusEl.textContent = 'ခွင့်ပြုချက် တောင်းခံနေသည်...';
+            permissionBtn.disabled = true;
+
+            try {
+                const permission = await Notification.requestPermission();
+
+                if (permission === 'granted') {
+                    permissionStatusEl.textContent = 'Notification လက်ခံရန် ခွင့်ပြုချက်ရရှိပြီးဖြစ်သည်။';
+                    permissionStatusEl.className = 'text-green-600 font-semibold';
+
+                    // --- အရေးကြီး ---
+                    // TODO: သင်၏ VAPID key ကို ဤနေရာတွင် ထည့်ပါ။
+                    // Firebase Console -> Project Settings -> Cloud Messaging tab -> Web configuration -> Web Push certificates
+                    const currentToken = await getToken(messaging, { vapidKey: 'BMCM9DyrsczpUxLkdrqYoBWbTqOO1i-opGY96xVPzLexsfo2sFrnGRtA7fen6AVWuB4YqK1g-ezZM5IuaWgKdBs' });
+
+                    if (currentToken) {
+                        console.log('FCM Token:', currentToken);
+                        fcmTokenEl.textContent = currentToken;
+                        tokenSection.classList.remove('hidden');
+                        permissionBtn.textContent = "Token ကို အသစ်ပြန်လည်ရယူမည်";
+                    } else {
+                        permissionStatusEl.textContent = 'FCM token ကို ရယူနိုင်ခြင်းမရှိပါ။ Browser console ကို စစ်ဆေးပါ။';
+                        permissionStatusEl.className = 'text-red-600 font-semibold';
+                    }
+                } else {
+                    permissionStatusEl.textContent = 'Notification လက်ခံရန် ခွင့်ပြုချက်ကို ပယ်ချခဲ့သည်။';
+                    permissionStatusEl.className = 'text-red-600 font-semibold';
+                }
+            } catch (error) {
+                console.error('An error occurred while getting token. ', error);
+                permissionStatusEl.textContent = 'Token ရယူရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့သည်: ' + error.message;
+                permissionStatusEl.className = 'text-red-600 font-semibold';
+            } finally {
+                permissionBtn.disabled = false;
+            }
+        }
+
+        // Handle incoming messages when the app is in the foreground
+        onMessage(messaging, (payload) => {
+            console.log('Message received. ', payload);
+
+            // Clear the initial message if it exists
+            const initialMessage = messagesLogEl.querySelector('.text-gray-400');
+            if (initialMessage) {
+                initialMessage.remove();
+            }
+
+            const messageElement = document.createElement('div');
+            messageElement.className = 'p-3 bg-blue-100 border-l-4 border-blue-500 rounded-r-lg';
+
+            const titleElement = document.createElement('h3');
+            titleElement.className = 'font-bold text-blue-800';
+            titleElement.textContent = payload.notification.title;
+
+            const bodyElement = document.createElement('p');
+            bodyElement.className = 'text-blue-700';
+            bodyElement.textContent = payload.notification.body;
+
+            messageElement.appendChild(titleElement);
+            messageElement.appendChild(bodyElement);
+
+            messagesLogEl.prepend(messageElement); // Add new message to the top
+        });
+
+        // Event Listeners
+        permissionBtn.addEventListener('click', requestPermissionAndGetToken);
+
+        copyTokenBtn.addEventListener('click', () => {
+            const token = fcmTokenEl.textContent;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(token).then(() => {
+                    alert('Token ကို Clipboard သို့ကူးယူပြီးပါပြီ!');
+                }).catch(err => {
+                    console.error('Could not copy text: ', err);
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement("textarea");
+                textArea.value = token;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    alert('Token ကို Clipboard သို့ကူးယူပြီးပါပြီ!');
+                } catch (err) {
+                    console.error('Fallback: Oops, unable to copy', err);
+                }
+                document.body.removeChild(textArea);
+            }
+        });
+
+    </script>
+</body>
+
+</html>

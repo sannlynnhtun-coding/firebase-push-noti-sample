@@ -1,6 +1,21 @@
 @FirebasePushNotiSample_HostAddress = http://localhost:5119
 
-GET {{FirebasePushNotiSample_HostAddress}}/weatherforecast/
-Accept: application/json
+### Send Notification to a specific device
+POST {{FirebasePushNotiSample_HostAddress}}/api/notifications/send-to-device
+Content-Type: application/json
 
-###
+{
+  "token": "csNl5sILxfF-vx4PuFCsr0:APA91bFe9rmem2_vYrWHh3YfTLsfVETSsI6J4KDCts8JmHOa0FjSC4cFo6oqtLNNaplJp8E2jUklxpvlojNnlYB8kZoEyKwXBFBDVNAjhrL54Nxzi3pIUto",
+  "title": "Hello from ASP.NET!",
+  "body": "This is a test notification to a single device."
+}
+
+### Send Notification to a topic
+POST {{FirebasePushNotiSample_HostAddress}}/api/notifications/send-to-topic
+Content-Type: application/json
+
+{
+  "topic": "TestTopic",
+  "title": "Greetings to all subscribers!",
+  "body": "This is a test notification for the topic subscribers."
+}
